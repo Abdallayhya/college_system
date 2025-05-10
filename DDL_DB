@@ -124,3 +124,77 @@ INSERT INTO StudentGPA (gpa_id, student_id, semester, gpa) VALUES
 INSERT INTO Schedule (schedule_id, course_id, instructor_id, room, day_of_week, start_time, end_time) VALUES
 (1, 1, 1, 'Room 101', 'Sunday', '09:00', '11:00'),
 (2, 2, 2, 'Room 202', 'Tuesday', '11:00', '13:00');
+-- ===========================================
+-- Advanced SQL Queries Using Joins, Subqueries,
+-- Aggregations, GROUP BY, HAVING + Views
+-- ===========================================
+-- 1. View: Student Progress (Courses, Grades, GPA)
+CREATE VIEW vw_StudentProgress AS
+SELECT
+    s.student_id,
+    s.full_name,
+    c.course_name,
+    e.semester,
+    g.grade,
+    g.grade_point,
+    sg.gpa
+FROM Student s
+JOIN Enrollment e ON s.student_id = e.student_id
+JOIN Course c ON e.course_id = c.course_id
+LEFT JOIN Grades g ON e.enrollment_id = g.enrollment_id
+LEFT JOIN StudentGPA sg ON s.student_id = sg.student_id AND sg.semester = e.semester;
+GO
+-- 2. View: Instructor Load (Courses Taught, Weekly Hours)
+CREATE VIEW vw_InstructorLoad AS
+SELECT
+    i.instructor_id,
+    i.full_name,
+    c.course_name,
+    s.day_of_week,
+    s.start_time,
+    s.end_time,
+    DATEDIFF(MINUTE, s.start_time, s.end_time)/60.0 AS weekly_hours
+FROM Instructor i
+JOIN Course c ON i.instructor_id = c.instructor_id
+JOIN Schedule s ON c.course_id = s.course_id;
+GO
+-- 3. Aggregation: Average GPA per Department
+SELECT
+    d.department_name,
+    AVG(sg.gpa) AS avg_gpa
+FROM StudentGPA sg
+JOIN Student s ON sg.student_id = s.student_id
+JOIN Department d ON s.department_id = d.department_id
+GROUP BY d.department_name
+HAVING AVG(sg.gpa) > 3.0;
+-- 4. Subquery: List students with GPA above department average
+SELECT
+    s.student_id,
+    s.full_name,
+    sg.gpa,
+    d.department_name
+FROM Student s
+JOIN StudentGPA sg ON s.student_id = sg.student_id
+JOIN Department d ON s.department_id = d.department_id
+WHERE sg.gpa > (
+    SELECT AVG(sg2.gpa)
+    FROM Student s2
+    JOIN StudentGPA sg2 ON s2.student_id = sg2.student_id
+    WHERE s2.department_id = s.department_id
+);
+-- 5. Join: Course Enrollment Count
+SELECT
+    c.course_name,
+    COUNT(e.enrollment_id) AS total_enrolled
+FROM Course c
+LEFT JOIN Enrollment e ON c.course_id = e.course_id
+GROUP BY c.course_name;
+-- 6. Subquery + Join: Instructors teaching 2+ courses
+SELECT
+    i.instructor_id,
+    i.full_name,
+    COUNT(c.course_id) AS course_count
+FROM Instructor i
+JOIN Course c ON i.instructor_id = c.instructor_id
+GROUP BY i.instructor_id, i.full_name
+HAVING COUNT(c.course_id) >= 2;
