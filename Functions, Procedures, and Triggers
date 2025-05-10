@@ -1,0 +1,117 @@
+-- ===================================================
+-- Step 3: Add Function, Procedure, Triggers
+-- ===================================================
+-- Scalar Function: Return Course Name by ID
+GO
+CREATE FUNCTION dbo.GetCourseNameById (@courseId INT)
+RETURNS VARCHAR(50)
+AS
+BEGIN
+    DECLARE @name VARCHAR(50);
+    SELECT @name = course_name FROM Course WHERE course_id = @courseId;
+    RETURN @name;
+END;
+-- After UPDATE Trigger: Log student name changes
+GO
+CREATE TABLE StudentLog (
+    log_id INT IDENTITY PRIMARY KEY,
+    student_id INT,
+    old_name VARCHAR(100),
+    new_name VARCHAR(100),
+    change_date DATETIME DEFAULT GETDATE()
+);
+GO
+CREATE TRIGGER trg_AfterStudentUpdate
+ON Student
+AFTER UPDATE
+AS
+BEGIN
+    INSERT INTO StudentLog (student_id, old_name, new_name)
+    SELECT d.student_id, d.full_name, i.full_name
+    FROM deleted d
+    JOIN inserted i ON d.student_id = i.student_id
+    WHERE d.full_name <> i.full_name;
+END;
+-- Instead Of Trigger Example: Block deletion of students
+GO
+CREATE TRIGGER trg_PreventStudentDelete
+ON Student
+INSTEAD OF DELETE
+AS
+BEGIN
+    PRINT 'Deletion of student records is not allowed.';
+END;
+--Get GPA by Student ID
+GO
+CREATE FUNCTION dbo.fn_GetStudentGPA (@student_id INT)
+RETURNS DECIMAL(3, 2)
+AS
+BEGIN
+    DECLARE @gpa DECIMAL(3, 2);
+    SELECT @gpa = AVG(gpa)
+    FROM StudentGPA
+    WHERE student_id = @student_id;
+    RETURN @gpa;
+END;
+--Register Student in Multiple Courses
+GO
+CREATE PROCEDURE dbo.sp_RegisterStudentCourses
+    @student_id INT,
+    @course_id INT,
+    @semester VARCHAR(20),
+    @enroll_date DATE,
+    @output_message NVARCHAR(100) OUTPUT
+AS
+BEGIN
+    BEGIN TRY
+        DECLARE @exists INT;
+        SELECT @exists = COUNT(*) FROM Enrollment
+        WHERE student_id = @student_id AND course_id = @course_id;
+        IF @exists = 0
+        BEGIN
+            INSERT INTO Enrollment (enrollment_id, student_id, course_id, enrollment_date, semester)
+            VALUES ((SELECT ISNULL(MAX(enrollment_id), 0) + 1 FROM Enrollment), @student_id, @course_id, @enroll_date, @semester);
+            SET @output_message = 'Enrollment successful.';
+        END
+        ELSE
+        BEGIN
+            SET @output_message = 'Student already enrolled in this course.';
+        END
+    END TRY
+    BEGIN CATCH
+        SET @output_message = ERROR_MESSAGE();
+    END CATCH
+END;
+--AFTER INSERT on Grades to Update GPA
+GO
+CREATE TRIGGER trg_UpdateGPA_AfterGradeInsert
+ON Grades
+AFTER INSERT
+AS
+BEGIN
+    DECLARE @student_id INT, @semester VARCHAR(20);
+    
+    SELECT 
+        @student_id = e.student_id,
+        @semester = e.semester
+    FROM Enrollment e
+    JOIN inserted i ON e.enrollment_id = i.enrollment_id;
+    -- Recalculate GPA
+    DECLARE @new_gpa DECIMAL(3,2);
+    SELECT @new_gpa = AVG(grade_point)
+    FROM Grades g
+    JOIN Enrollment e ON g.enrollment_id = e.enrollment_id
+    WHERE e.student_id = @student_id AND e.semester = @semester;
+    -- Update StudentGPA
+    IF EXISTS (SELECT 1 FROM StudentGPA WHERE student_id = @student_id AND semester = @semester)
+    BEGIN
+        UPDATE StudentGPA
+        SET gpa = @new_gpa
+        WHERE student_id = @student_id AND semester = @semester;
+    END
+    ELSE
+    BEGIN
+        INSERT INTO StudentGPA (gpa_id, student_id, semester, gpa)
+        VALUES ((SELECT ISNULL(MAX(gpa_id), 0) + 1 FROM StudentGPA), @student_id, @semester, @new_gpa);
+    END
+END;
