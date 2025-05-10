@@ -1,0 +1,126 @@
+-- Enable messages
+SET NOCOUNT ON;
+-- ===================================================
+-- Step 1: Create Tables
+-- ===================================================
+-- 1. Faculty Table
+CREATE TABLE Faculty (
+    faculty_id INT PRIMARY KEY,
+    faculty_name VARCHAR(100) NOT NULL
+);
+-- 2. Department Table
+CREATE TABLE Department (
+    department_id INT PRIMARY KEY,
+    department_name VARCHAR(100) NOT NULL,
+    faculty_id INT,
+    FOREIGN KEY (faculty_id) REFERENCES Faculty(faculty_id)
+);
+-- 3. Instructor Table
+CREATE TABLE Instructor (
+    instructor_id INT PRIMARY KEY,
+    full_name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE,
+    phone VARCHAR(11),
+    department_id INT,
+    FOREIGN KEY (department_id) REFERENCES Department(department_id)
+);
+-- 4. Course Table
+CREATE TABLE Course (
+    course_id INT PRIMARY KEY,
+    course_name VARCHAR(21) NOT NULL,
+    credit_hours INT,
+    department_id INT,
+    instructor_id INT,
+    FOREIGN KEY (department_id) REFERENCES Department(department_id),
+    FOREIGN KEY (instructor_id) REFERENCES Instructor(instructor_id)
+);
+-- 5. Student Table
+CREATE TABLE Student (
+    student_id INT PRIMARY KEY,
+    full_name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) UNIQUE,
+    gender VARCHAR(6),
+    date_of_birth DATE,
+    department_id INT,
+    FOREIGN KEY (department_id) REFERENCES Department(department_id)
+);
+-- 6. Enrollment Table
+CREATE TABLE Enrollment (
+    enrollment_id INT PRIMARY KEY,
+    student_id INT,
+    course_id INT,
+    enrollment_date DATE,
+    semester VARCHAR(20),
+    FOREIGN KEY (student_id) REFERENCES Student(student_id),
+    FOREIGN KEY (course_id) REFERENCES Course(course_id)
+);
+-- 7. Grades Table
+CREATE TABLE Grades (
+    grade_id INT PRIMARY KEY,
+    enrollment_id INT,
+    grade CHAR(2), -- Example: A, B+, C
+    grade_point DECIMAL(3, 2),
+    FOREIGN KEY (enrollment_id) REFERENCES Enrollment(enrollment_id)
+);
+-- 8. StudentGPA Table
+CREATE TABLE StudentGPA (
+    gpa_id INT PRIMARY KEY,
+    student_id INT,
+    semester VARCHAR(20),
+    gpa DECIMAL(3, 2),
+    FOREIGN KEY (student_id) REFERENCES Student(student_id)
+);
+-- 9. Schedule Table (Time Table)
+CREATE TABLE Schedule (
+    schedule_id INT PRIMARY KEY,
+    course_id INT,
+    instructor_id INT,
+    room VARCHAR(20),
+    day_of_week VARCHAR(10),
+    start_time TIME,
+    end_time TIME,
+    FOREIGN KEY (course_id) REFERENCES Course(course_id),
+    FOREIGN KEY (instructor_id) REFERENCES Instructor(instructor_id)
+);
+-- ===================================================
+-- Step 2: Insert Sample Data
+-- ===================================================
+-- 1. Faculty
+INSERT INTO Faculty (faculty_id, faculty_name) VALUES
+(1, 'Faculty of Computer and Data Science'),
+(2, 'Faculty of Engineering');
+-- 2. Department
+INSERT INTO Department (department_id, department_name, faculty_id) VALUES
+(1, 'Computer Science', 1),
+(2, 'Data Science', 1),
+(3, 'Electrical Engineering', 2);
+-- 3. Instructor
+INSERT INTO Instructor (instructor_id, full_name, email, phone, department_id) VALUES
+(1, 'Dr. Ahmed Youssef', 'ahmed@univ.edu', '01000000001', 1),
+(2, 'Dr. Mona Saleh', 'mona@univ.edu', '01000000002', 2),
+(3, 'Eng. Hany Said', 'hany@univ.edu', '01000000003', 3);
+-- 4. Course
+INSERT INTO Course (course_id, course_name, credit_hours, department_id, instructor_id) VALUES
+(1, 'Data Structures', 3, 1, 1),
+(2, 'Machine Learning', 3, 2, 2),
+(3, 'Digital Circuits', 4, 3, 3);
+-- 5. Student
+INSERT INTO Student (student_id, full_name, email, gender, date_of_birth, department_id) VALUES
+(1, 'Abdalla Yehia', 'abdalla@student.univ.edu', 'Male', '2003-08-15', 1),
+(2, 'Sara Hossam', 'sara@student.univ.edu', 'Female', '2004-02-20', 2);
+-- 6. Enrollment
+INSERT INTO Enrollment (enrollment_id, student_id, course_id, enrollment_date, semester) VALUES
+(1, 1, 1, '2025-02-01', 'Spring 2025'),
+(2, 2, 2, '2025-02-01', 'Spring 2025');
+-- 7. Grades
+INSERT INTO Grades (grade_id, enrollment_id, grade, grade_point) VALUES
+(1, 1, 'A', 4.00),
+(2, 2, 'B+', 3.30);
+-- 8. StudentGPA
+INSERT INTO StudentGPA (gpa_id, student_id, semester, gpa) VALUES
+(1, 1, 'Spring 2025', 4.00),
+(2, 2, 'Spring 2025', 3.30);
+-- 9. Schedule
+INSERT INTO Schedule (schedule_id, course_id, instructor_id, room, day_of_week, start_time, end_time) VALUES
+(1, 1, 1, 'Room 101', 'Sunday', '09:00', '11:00'),
+(2, 2, 2, 'Room 202', 'Tuesday', '11:00', '13:00');
