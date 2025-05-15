@@ -1,0 +1,107 @@
+-- Enable messages
+SET NOCOUNT ON;
+GO
+-- 1- LOST UPDATE
+-- Step 1: (simulating User A)
+BEGIN TRANSACTION LostUpdateSingleWindow1;
+SELECT course_name, credit_hours FROM Course WHERE course_id = 1;
+WAITFOR DELAY '00:00:05';
+UPDATE Course SET credit_hours = credit_hours + 1 WHERE course_id = 1;
+-- At this point, User A's update is not yet committed
+-- Step 2: (simulating User B)
+BEGIN TRANSACTION LostUpdateSingleWindow2;
+SELECT course_name, credit_hours FROM Course WHERE course_id = 1;
+UPDATE Course SET credit_hours = credit_hours + 2 WHERE course_id = 1;
+COMMIT TRANSACTION LostUpdateSingleWindow2;
+-- **Step 3: (completing User A's transaction)
+COMMIT TRANSACTION LostUpdateSingleWindow1;
+-- **Step 4: final result
+SELECT course_name, credit_hours FROM Course WHERE course_id = 1;
+-- Observe that the final credit_hours might not be the sum of both increments due to the lost update.
+GO
+-- Dirty Read
+-- **Step 1:  Start the transaction (User D) and make an uncommitted change.**
+BEGIN TRANSACTION DirtyReadSingleWindow;
+UPDATE Student SET full_name = 'Abdalla Ahmed' WHERE student_id = 1;
+-- User D has made an uncommitted change.
+-- **Step 2:  Read the uncommitted data (User C) using READ UNCOMMITTED.**
+--  This MUST happen *while User D's transaction is still open (before the ROLLBACK).*
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+SELECT full_name FROM Student WHERE student_id = 1;
+-- (You SHOULD see 'Abdalla Ahmed' in the Results tab - this is the dirty read)
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED;  -- Reset the isolation level immediately.
+-- **Step 3: Roll back User D's transaction.
+ROLLBACK;
+-- User D's uncommitted change is now undone. The database is back to the original state
+-- Step 4: Read the data again (User C) using the default isolation level (READ COMMITTED)
+SELECT full_name FROM Student WHERE student_id = 1;
+-- (You should now see the original name 'Abdalla Yehia' in the Results tab.
+--  This confirms that the dirty read in Step 2 was of data that was never committed
+GO
+-- Comparing Isolation Levels (Single Window)
+-- 1. READ UNCOMMITTED
+-- Allows dirty reads (reading uncommitted changes from other transactions
+-- Least restrictive, highest concurrency, lowest data integrity
+SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+BEGIN TRANSACTION T1;
+UPDATE Student SET full_name = 'Test_Uncommitted' WHERE student_id = 1;
+SELECT full_name FROM Student WHERE student_id = 1;
+-- **Expected Output:** Might show 'Test_Uncommitted' (the uncommitted value).
+ROLLBACK TRANSACTION T1;
+SELECT full_name FROM Student WHERE student_id = 1;
+-- **Expected Output:** Shows original, committed value (e.g., 'Abdalla Yehia').
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED; -- Reset to default
+GO
+-- **2. READ COMMITTED (Default)
+-- Prevents dirty reads, but allows non-repeatable reads and phantom reads.
+-- Good balance between concurrency and data integrity.
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED; -- Default, but setting it for clarity
+BEGIN TRANSACTION T2;
+UPDATE Student SET full_name = 'Test_Committed_1' WHERE student_id = 1;
+COMMIT TRANSACTION T2;
+SELECT full_name FROM Student WHERE student_id = 1;
+-- **Expected Output:** Shows 'Test_Committed_1'.
+BEGIN TRANSACTION T3;
+UPDATE Student SET full_name = 'Test_Committed_2' WHERE student_id = 1;
+SELECT full_name FROM Student WHERE student_id = 1;
+-- **Expected Output:** Shows 'Test_Committed_2'.
+ROLLBACK TRANSACTION T3;
+SELECT full_name FROM Student WHERE student_id = 1;
+-- **Expected Output:** Shows 'Test_Committed_1'.
+GO
+-- **3. REPEATABLE READ
+-- Prevents dirty reads and non-repeatable reads, but allows phantom reads.
+-- More restrictive than READ COMMITTED, higher data integrity.
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+BEGIN TRANSACTION RepeatableReadDemo;
+SELECT full_name FROM Student WHERE student_id = 1;
+-- **Expected Output:** Shows the committed value of full_name.
+UPDATE Student SET full_name = 'Changed_During_RR' WHERE student_id = 1;
+SELECT full_name FROM Student WHERE student_id = 1;
+-- **Expected Output:** Shows the same value as the first SELECT within this RepeatableReadDemo transaction.
+INSERT INTO Student (student_id, full_name, email, gender, date_of_birth, department_id)
+VALUES (999, 'Phantom Student', 'phantom@test.com', 'Other', '2000-01-01', 1);
+SELECT full_name FROM Student WHERE student_id = 1;
+-- **Expected Output**: Shows the same value as before. The new row is a phantom.
+SELECT * FROM Student WHERE student_id = 1 OR student_id = 999;
+-- **Expected Output**: Shows the new row.
+COMMIT TRANSACTION RepeatableReadDemo;
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED; -- Reset
+GO
+-- **4. SERIALIZABLE
+-- Prevents all concurrency problems: dirty reads, non-repeatable reads, and phantom reads.
+-- Most restrictive, lowest concurrency, highest data integrity.
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+BEGIN TRANSACTION SerializableDemo;
+SELECT full_name FROM Student WHERE student_id = 1;
+-- **Expected Output:** Shows the committed value of full_name.
+UPDATE Student SET full_name = 'Changed_During_Serial' WHERE student_id = 1;
+SELECT full_name FROM Student WHERE student_id = 1;
+-- **Expected Output:** Shows the same value as the first SELECT within this SerializableDemo transaction.
+INSERT INTO Student (student_id, full_name, email, gender, date_of_birth, department_id)
+VALUES (888, 'Blocked Student', 'blocked@test.com', 'Other', '2000-01-01', 1);
+SELECT full_name from Student where student_id = 1 OR student_id = 888;
+-- Expected output:  Shows the same students as before.
+COMMIT TRANSACTION SerializableDemo;
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED; -- Reset
+GO
